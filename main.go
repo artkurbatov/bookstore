@@ -37,7 +37,7 @@ func main() {
 	}
 	handleRoutes()
 
-	fmt.Println("server staring on port %s", s.Addr)
+	fmt.Printf("server staring on port %s\n", s.Addr)
 	if err := http.ListenAndServe(s.Addr, nil); err != nil {
 		fmt.Printf("server starting error: %s\n", err)
 	}
