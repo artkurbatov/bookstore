@@ -36,6 +36,10 @@ func main() {
 	router := gin.Default()
 	router.GET("/books", getBooks)
 	router.GET("/books/:id", getBook)
+	router.POST("/book", addBook)
+	router.PATCH("/return", returnBook)
+	router.PATCH("/checkout", checkoutBook)
+	router.PATCH("/swap", swapBooks)
 	router.Run(":8080")
 }
 
@@ -61,4 +65,89 @@ func getBookByID(id string) (*Book, error) {
 		}
 	}
 	return nil, fmt.Errorf("book not found")
+}
+
+func addBook(c *gin.Context) {
+	var book Book
+
+	if err := c.BindJSON(&book); err != nil {
+		return
+	}
+	books = append(books, book)
+	c.IndentedJSON(http.StatusOK, book)
+}
+
+func returnBook(c *gin.Context) {
+	id, ok := c.GetQuery("id")
+
+	if !ok {
+		c.IndentedJSON(http.StatusBadRequest, gin.H{"message": "id not found"})
+		return
+	}
+
+	book, err := getBookByID(id)
+	if err != nil {
+		c.IndentedJSON(http.StatusNotFound, gin.H{"message": "book not found"})
+		return
+	}
+
+	book.Quantity++
+	c.IndentedJSON(http.StatusOK, book)
+}
+
+func checkoutBook(c *gin.Context) {
+	id, ok := c.GetQuery("id")
+
+	if !ok {
+		c.IndentedJSON(http.StatusBadRequest, gin.H{"message": "id not found"})
+		return
+	}
+
+	book, err := getBookByID(id)
+	if err != nil {
+		c.IndentedJSON(http.StatusNotFound, gin.H{"message": "book not found"})
+		return
+	}
+
+	if book.Quantity <= 0 {
+		c.IndentedJSON(http.StatusBadRequest, gin.H{"message": "book is out of stock"})
+		return
+	}
+	book.Quantity--
+	c.IndentedJSON(http.StatusOK, book)
+}
+
+func swapBooks(c *gin.Context) {
+	returnID, ok := c.GetQuery("id")
+	if !ok {
+		c.IndentedJSON(http.StatusBadRequest, gin.H{"message": "return id not found"})
+		return
+	}
+
+	checkoutID, ok := c.GetQuery("to")
+	if !ok {
+		c.IndentedJSON(http.StatusBadRequest, gin.H{"message": "checkout id not found"})
+		return
+	}
+
+	returnB, err := getBookByID(returnID)
+	if err != nil {
+		c.IndentedJSON(http.StatusNotFound, gin.H{"message": "return book not found"})
+		return
+	}
+
+	checkoutB, err := getBookByID(checkoutID)
+	if err != nil {
+		c.IndentedJSON(http.StatusNotFound, gin.H{"message": "checkout book not found"})
+		return
+	}
+
+	if checkoutB.Quantity <= 0 {
+		c.IndentedJSON(http.StatusBadRequest, gin.H{"message": "checkout book is out of stock"})
+		return
+	}
+
+	returnB.Quantity++
+	checkoutB.Quantity--
+	c.IndentedJSON(http.StatusOK, checkoutB)
 }
