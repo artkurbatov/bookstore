@@ -29,7 +29,7 @@ type JSONResponse struct {
 	Message string `json: message`
 }
 
-var DB sql.DB
+var db *sql.DB
 
 var books = []Book{
 	{ID: 0, Name: "The Shining", Author: "Stephen King", Quantity: 4},
@@ -39,7 +39,11 @@ var books = []Book{
 }
 
 func main() {
-	SetupDBConnection()
+	// Data base configuration
+	db = SetupDBConnection()
+	createBookTable(db)
+	defer db.Close()
+	// Router configuration
 	SetupRouter()
 }
 
@@ -54,12 +58,11 @@ func SetupRouter() {
 	router.Run(":8080")
 }
 
-func SetupDBConnection() {
+func SetupDBConnection() *sql.DB {
 	const path = "user=postgres password=secret dbname=bookstore sslmode=disable"
 	const dName = "postgres"
 
 	db, err := sql.Open(dName, path)
-	defer db.Close()
 
 	if err != nil {
 		log.Fatal(err)
@@ -67,32 +70,33 @@ func SetupDBConnection() {
 	if err = db.Ping(); err != nil {
 		log.Fatal(err)
 	}
-	createBookTable(db)
+	return db
 
-	for i := range books {
-		pk := insertBook(db, books[i])
+	// createBookTable(db)
 
-		var name string
-		var author string
-		var quantity int
+	// for i := range books {
+	// 	pk := insertBook(db, books[i])
 
-		quary := "SELECT name, author, quantity FROM bookstore WHERE id = $1"
-		if err := db.QueryRow(quary, pk).Scan(&name, &author, &quantity); err != nil {
-			log.Fatal(err)
-		}
+	// 	var name string
+	// 	var author string
+	// 	var quantity int
 
-		fmt.Printf("Name: %s\n", name)
-		fmt.Printf("Author: %s\n", author)
-		fmt.Printf("Quantity: %d\n", quantity)
-	}
+	// 	quary := "SELECT name, author, quantity FROM bookstore WHERE id = $1"
+	// 	if err := db.QueryRow(quary, pk).Scan(&name, &author, &quantity); err != nil {
+	// 		log.Fatal(err)
+	// 	}
 
+	// 	fmt.Printf("Name: %s\n", name)
+	// 	fmt.Printf("Author: %s\n", author)
+	// 	fmt.Printf("Quantity: %d\n", quantity)
+	// }
+}
+
+func getBooks(c *gin.Context) {
 	quary := "SELECT id, name, author, quantity FROM bookstore"
-	dbBooks := []Book{}
+	dbBooks := make([]Book, 0)
 	rows, err := db.Query(quary)
-	if err != nil {
-		log.Fatal(err)
-	}
-
+	handleError(err)
 	defer rows.Close()
 
 	var id int
@@ -101,16 +105,12 @@ func SetupDBConnection() {
 	var quantity int
 
 	for rows.Next() {
-		if err := rows.Scan(&id, &name, &author, &quantity); err != nil {
-			log.Fatal(err)
-		}
+		err := rows.Scan(&id, &name, &author, &quantity)
+		handleError(err)
 		dbBooks = append(dbBooks, Book{id, name, author, quantity})
 	}
-	fmt.Println(dbBooks)
-}
-
-func getBooks(c *gin.Context) {
-	c.IndentedJSON(http.StatusOK, books)
+	log.Println(dbBooks)
+	c.IndentedJSON(http.StatusOK, dbBooks)
 }
 
 func getBook(c *gin.Context) {
@@ -141,10 +141,16 @@ func getBookByID(id string) (*Book, error) {
 func addBook(c *gin.Context) {
 	var book Book
 
-	if err := c.BindJSON(&book); err != nil {
-		return
-	}
-	books = append(books, book)
+	err := c.BindJSON(&book)
+	handleError(err)
+
+	queary := `INSERT INTO bookstore(name, author, quantity)
+		VALUES ($1, $2, $3) RETURNING id`
+
+	var id int
+	err = db.QueryRow(queary, book.Name, book.Author, book.Quantity).Scan(&id)
+	handleError(err)
+	log.Printf("Added book with id=%d\n", id)
 	c.IndentedJSON(http.StatusOK, book)
 }
 
@@ -237,13 +243,19 @@ func createBookTable(db *sql.DB) {
 	}
 }
 
-func insertBook(db *sql.DB, book Book) int {
-	queary := `INSERT INTO bookstore(name, author, quantity)
-		VALUES ($1, $2, $3) RETURNING id`
+// func insertBook(db *sql.DB, book Book) int {
+// 	queary := `INSERT INTO bookstore(name, author, quantity)
+// 		VALUES ($1, $2, $3) RETURNING id`
 
-	var pq int
-	if err := db.QueryRow(queary, book.Name, book.Author, book.Quantity).Scan(&pq); err != nil {
+// 	var pq int
+// 	if err := db.QueryRow(queary, book.Name, book.Author, book.Quantity).Scan(&pq); err != nil {
+// 		log.Fatal(err)
+// 	}
+// 	return pq
+// }
+
+func handleError(err error) {
+	if err != nil {
 		log.Fatal(err)
 	}
-	return pq
 }
