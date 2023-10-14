@@ -31,21 +31,17 @@ type JSONResponse struct {
 
 var db *sql.DB
 
-var books = []Book{
-	{ID: 0, Name: "The Shining", Author: "Stephen King", Quantity: 4},
-	{ID: 1, Name: "Dune", Author: "Frank Herbert", Quantity: 7},
-	{ID: 2, Name: "Fahrenheit 451", Author: "Ray Bradbury", Quantity: 1},
-	{ID: 3, Name: "The Giver", Author: "Lois Lowry", Quantity: 3},
-}
-
 func main() {
 	// Data base configuration
 	db = SetupDBConnection()
 	createBookTable(db)
 	defer db.Close()
+
 	// Router configuration
 	SetupRouter()
 }
+
+// Router
 
 func SetupRouter() {
 	router := gin.Default()
@@ -57,6 +53,8 @@ func SetupRouter() {
 	router.PATCH("/swap", swapBooks)
 	router.Run(":8080")
 }
+
+// Data base setup
 
 func SetupDBConnection() *sql.DB {
 	const path = "user=postgres password=secret dbname=bookstore sslmode=disable"
@@ -81,8 +79,8 @@ func SetupDBConnection() *sql.DB {
 	// 	var author string
 	// 	var quantity int
 
-	// 	quary := "SELECT name, author, quantity FROM bookstore WHERE id = $1"
-	// 	if err := db.QueryRow(quary, pk).Scan(&name, &author, &quantity); err != nil {
+	// 	query := "SELECT name, author, quantity FROM bookstore WHERE id = $1"
+	// 	if err := db.QueryRow(query, pk).Scan(&name, &author, &quantity); err != nil {
 	// 		log.Fatal(err)
 	// 	}
 
@@ -92,10 +90,12 @@ func SetupDBConnection() *sql.DB {
 	// }
 }
 
+// API handlers
+
 func getBooks(c *gin.Context) {
-	quary := "SELECT id, name, author, quantity FROM bookstore"
+	query := "SELECT id, name, author, quantity FROM bookstore"
 	dbBooks := make([]Book, 0)
-	rows, err := db.Query(quary)
+	rows, err := db.Query(query)
 	handleError(err)
 	defer rows.Close()
 
@@ -124,19 +124,36 @@ func getBook(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, book)
 }
 
-func getBookByID(id string) (*Book, error) {
-	ind, err := strconv.Atoi(id)
+func getBookByID(queryID string) (Book, error) {
+	query := `SELECT id, name, author, quantity FROM bookstore WHERE id = $1`
+	ind, err := strconv.Atoi(queryID)
 	if err != nil {
-		return nil, fmt.Errorf("book not found")
+		return Book{}, fmt.Errorf("book not found")
 	}
 
-	for i, b := range books {
-		if ind == b.ID {
-			return &books[i], nil
-		}
-	}
-	return nil, fmt.Errorf("book not found")
+	var id int
+	var name string
+	var author string
+	var quantity int
+
+	err = db.QueryRow(query, ind).Scan(&id, &name, &author, &quantity)
+	handleError(err)
+	book := Book{id, name, author, quantity}
+	log.Println(book)
+
+	return book, nil
 }
+
+// func getBooksByAuthor(author string) (Book, error) {
+// 	query := `SELECT id, name, author, quantity FROM bookstore WHERE author = $1`
+
+// 	var book Book
+
+// 	err = db.QueryRow(query, ind).Scan(&book)
+// 	handleError(err)
+
+// 	return book, nil
+// }
 
 func addBook(c *gin.Context) {
 	var book Book
@@ -144,11 +161,11 @@ func addBook(c *gin.Context) {
 	err := c.BindJSON(&book)
 	handleError(err)
 
-	queary := `INSERT INTO bookstore(name, author, quantity)
+	query := `INSERT INTO bookstore(name, author, quantity)
 		VALUES ($1, $2, $3) RETURNING id`
 
 	var id int
-	err = db.QueryRow(queary, book.Name, book.Author, book.Quantity).Scan(&id)
+	err = db.QueryRow(query, book.Name, book.Author, book.Quantity).Scan(&id)
 	handleError(err)
 	log.Printf("Added book with id=%d\n", id)
 	c.IndentedJSON(http.StatusOK, book)
