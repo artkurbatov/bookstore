@@ -96,7 +96,12 @@ func getBooks(c *gin.Context) {
 	query := "SELECT id, name, author, quantity FROM bookstore"
 	dbBooks := make([]Book, 0)
 	rows, err := db.Query(query)
-	handleError(err)
+
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
 	defer rows.Close()
 
 	var id int
@@ -106,7 +111,12 @@ func getBooks(c *gin.Context) {
 
 	for rows.Next() {
 		err := rows.Scan(&id, &name, &author, &quantity)
-		handleError(err)
+
+		if err != nil {
+			log.Println(err)
+			return
+		}
+
 		dbBooks = append(dbBooks, Book{id, name, author, quantity})
 	}
 	log.Println(dbBooks)
@@ -137,7 +147,10 @@ func getBookByID(queryID string) (Book, error) {
 	var quantity int
 
 	err = db.QueryRow(query, ind).Scan(&id, &name, &author, &quantity)
-	handleError(err)
+	if err != nil {
+		log.Println(err)
+		return Book{}, fmt.Errorf("book not found")
+	}
 	book := Book{id, name, author, quantity}
 	log.Println(book)
 
@@ -159,14 +172,22 @@ func addBook(c *gin.Context) {
 	var book Book
 
 	err := c.BindJSON(&book)
-	handleError(err)
+	if err != nil {
+		log.Println(err)
+		return
+	}
 
 	query := `INSERT INTO bookstore(name, author, quantity)
 		VALUES ($1, $2, $3) RETURNING id`
 
 	var id int
 	err = db.QueryRow(query, book.Name, book.Author, book.Quantity).Scan(&id)
-	handleError(err)
+
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
 	log.Printf("Added book with id=%d\n", id)
 	c.IndentedJSON(http.StatusOK, book)
 }
@@ -270,9 +291,3 @@ func createBookTable(db *sql.DB) {
 // 	}
 // 	return pq
 // }
-
-func handleError(err error) {
-	if err != nil {
-		log.Fatal(err)
-	}
-}
